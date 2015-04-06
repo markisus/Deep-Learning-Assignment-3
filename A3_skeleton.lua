@@ -33,6 +33,7 @@ function TemporalLogExpPooling:updateOutput(input)
    frame_size = input:size()[2]
    num_output_frames = 1 + math.floor((num_frames - kW)/dW)
    self.output = torch.Tensor(num_output_frames, frame_size)
+   self.usage = torch.Tensor(num_output_frames, num_frames):zero()
    frame_number = 0
    while frame_number < num_output_frames do
    	 frame_number = frame_number + 1
@@ -40,15 +41,30 @@ function TemporalLogExpPooling:updateOutput(input)
 	 window = input[{{kernel_bottom, kernel_top}, {}}]:clone()
 	 res = torch.sum(window:mul(self.beta), 1):exp()
 	 res:mul(1/(kernel_top - kernel_bottom + 1)):log():mul(1/self.beta)
-	 self.output[frame_number] = res	 
+	 self.output[frame_number] = res
+	 self.usage[{{frame_number}, {kernel_bottom, kernel_top}}] = 1
    end
    return self.output
 end
 
 function TemporalLogExpPooling:updateGradInput(input, gradOutput)
-   -----------------------------------------------
-   -- your code here
-   -----------------------------------------------
+   -- gradient of output wrt to input 
+   -- output is num_frames by 1 + math.floor((num_frames - kW)/dW)
+   num_frames = input:size()[1]
+   frame_size = input:size()[2]
+   num_output_frames = 1 + math.floor((num_frames - kW)/dW)
+   exp_beta_x = input:clone():mul(self.beta):exp()
+   denoms = torch.mm(self.usage, exp_beta_x)
+   self.gradInput = torch.Tensor(num_frames, frame_size)
+   for feature_number = 1, frame_size do
+       for frame_number = 1, num_frames do
+       	   numerator = exp_beta_x[frame_number, feature_number]
+	   res = self.usage[{{}, frame_number}]:clone()
+	   res:mul(numerator):cdiv(denoms[{{}, feature_number}])
+	   -- dot product
+	   self.gradInput[frame_number, feature_number] = res * gradOutput[{{}, feature_number}]
+       end
+   end
    return self.gradInput
 end
 
