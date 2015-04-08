@@ -1,3 +1,4 @@
+
 -------------------------------------------------------------------------
 -- In this part of the assignment you will become more familiar with the
 -- internal structure of torch modules and the torch documentation.
@@ -15,6 +16,7 @@
 --
 -- Please find submission instructions on the handout
 ------------------------------------------------------------------------
+require 'nn'
 
 local TemporalLogExpPooling, parent = torch.class('nn.TemporalLogExpPooling', 'nn.Module')
 
@@ -58,11 +60,11 @@ function TemporalLogExpPooling:updateGradInput(input, gradOutput)
    self.gradInput = torch.Tensor(num_frames, frame_size)
    for feature_number = 1, frame_size do
        for frame_number = 1, num_frames do
-       	   numerator = exp_beta_x[frame_number, feature_number]
+       	   numerator = exp_beta_x[{frame_number, feature_number}]
 	   res = self.usage[{{}, frame_number}]:clone()
 	   res:mul(numerator):cdiv(denoms[{{}, feature_number}])
 	   -- dot product
-	   self.gradInput[frame_number, feature_number] = res * gradOutput[{{}, feature_number}]
+	   self.gradInput[{frame_number, feature_number}] = res * gradOutput[{{}, feature_number}]
        end
    end
    return self.gradInput
