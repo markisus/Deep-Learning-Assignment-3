@@ -16,8 +16,6 @@
 --
 -- Please find submission instructions on the handout
 ------------------------------------------------------------------------
-require 'nn'
-
 local TemporalLogExpPooling, parent = torch.class('nn.TemporalLogExpPooling', 'nn.Module')
 
 function TemporalLogExpPooling:__init(kW, dW, beta)
@@ -31,15 +29,20 @@ function TemporalLogExpPooling:__init(kW, dW, beta)
 end
 
 function TemporalLogExpPooling:updateOutput(input)
-   num_frames = input:size()[1]
-   frame_size = input:size()[2]
-   num_output_frames = 1 + math.floor((num_frames - kW)/dW)
+   self.num_frames = input:size()[1]
+   self.frame_size = input:size()[2]
+   self.num_output_frames = 1 + math.floor((self.num_frames - self.kW)/self.dW)
+   num_frames = self.num_frames
+   frame_size = self.frame_size
+   num_output_frames = self.num_output_frames
+
    self.output = torch.Tensor(num_output_frames, frame_size)
    self.usage = torch.Tensor(num_output_frames, num_frames):zero()
    frame_number = 0
    while frame_number < num_output_frames do
    	 frame_number = frame_number + 1
-   	 kernel_top = math.min(input:size()[2], kernel_bottom + self.kW - 1)
+	 kernel_bottom = frame_number
+   	 kernel_top = math.min(frame_size, kernel_bottom + self.kW - 1)
 	 window = input[{{kernel_bottom, kernel_top}, {}}]:clone()
 	 res = torch.sum(window:mul(self.beta), 1):exp()
 	 res:mul(1/(kernel_top - kernel_bottom + 1)):log():mul(1/self.beta)
@@ -52,9 +55,9 @@ end
 function TemporalLogExpPooling:updateGradInput(input, gradOutput)
    -- gradient of output wrt to input 
    -- output is num_frames by 1 + math.floor((num_frames - kW)/dW)
-   num_frames = input:size()[1]
-   frame_size = input:size()[2]
-   num_output_frames = 1 + math.floor((num_frames - kW)/dW)
+   num_frames = self.num_frames
+   frame_size = self.frame_size
+   num_output_frames = self.num_output_frames
    exp_beta_x = input:clone():mul(self.beta):exp()
    denoms = torch.mm(self.usage, exp_beta_x)
    self.gradInput = torch.Tensor(num_frames, frame_size)
