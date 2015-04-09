@@ -72,8 +72,11 @@ function TemporalLogExpPooling:updateGradInput(input, gradOutput)
        for frame_number = 1, num_frames do
        	   numerator = exp_beta_x[{frame_number, feature_number}]
 	   res = self.usage[{{}, frame_number}]:clone()
+	   --print("Frame ", frame_number, " usage ", res)
 	   res:mul(numerator):cdiv(denoms[{{}, feature_number}])
 	   -- dot product
+	   --print("res ", res)
+	   --print("dOutput/dFeature ", gradOutput[{{}, feature_number}])
 	   self.gradInput[{frame_number, feature_number}] = res * gradOutput[{{}, feature_number}]
        end
    end
