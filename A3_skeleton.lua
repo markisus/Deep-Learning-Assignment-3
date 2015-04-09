@@ -36,18 +36,25 @@ function TemporalLogExpPooling:updateOutput(input)
    frame_size = self.frame_size
    num_output_frames = self.num_output_frames
 
+   --print("Inside update output")
+
    self.output = torch.Tensor(num_output_frames, frame_size)
    self.usage = torch.Tensor(num_output_frames, num_frames):zero()
    frame_number = 0
+   kernel_bottom = 1
    while frame_number < num_output_frames do
    	 frame_number = frame_number + 1
-	 kernel_bottom = frame_number
-   	 kernel_top = math.min(frame_size, kernel_bottom + self.kW - 1)
+   	 kernel_top = math.min(num_frames, kernel_bottom + self.kW - 1)
+	 --print(kernel_bottom, kernel_top)
 	 window = input[{{kernel_bottom, kernel_top}, {}}]:clone()
-	 res = torch.sum(window:mul(self.beta), 1):exp()
+	 --print(window)
+	 res = torch.sum(window:mul(self.beta):exp(), 1)
+	 --print(res)
 	 res:mul(1/(kernel_top - kernel_bottom + 1)):log():mul(1/self.beta)
+	 --print(res)
 	 self.output[frame_number] = res
 	 self.usage[{{frame_number}, {kernel_bottom, kernel_top}}] = 1
+	 kernel_bottom = kernel_bottom + self.dW
    end
    return self.output
 end

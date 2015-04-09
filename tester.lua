@@ -1,6 +1,6 @@
 require 'nn'
 require 'A3_skeleton'
 
-m = nn.TemporalLogExpPooling(1,1,1)
-t = torch.Tensor(1,1):fill(0)
+m = nn.TemporalLogExpPooling(5,3,7)
+t = torch.linspace(1,100):resize(100,1)
 o = m:forward(t)
