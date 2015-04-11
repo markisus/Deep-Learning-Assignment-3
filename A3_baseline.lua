@@ -1,6 +1,7 @@
 require 'torch'
 require 'nn'
 require 'optim'
+require 'A3_skeleton'
 
 ffi = require('ffi')
 
@@ -172,7 +173,7 @@ function main()
     --------------------------------------------------------------------------------------
     -- Replace this temporal max-pooling module with your log-exponential pooling module:
     --------------------------------------------------------------------------------------
-    model:add(nn.TemporalMaxPooling(3, 1))
+    model:add(nn.TemporalLogExpPooling(3, 1, 1))
     
     model:add(nn.Reshape(20*39, true))
     model:add(nn.Linear(20*39, 5))
