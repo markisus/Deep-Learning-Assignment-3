@@ -27,7 +27,6 @@ function preprocess_data(raw_data, opt)
             -- standardize to all lowercase
             local document = ffi.string(torch.data(raw_data.content:narrow(1, index, 1))):lower()
             
-            -- break each review into words and compute the document average
             vectorized_document = torch.Tensor(opt.words_per_review, opt.inputDim):fill(0)
 	    word_number = 1
 	    for word in document:gmatch("%S+") do
@@ -93,6 +92,9 @@ function train_model(model, criterion, data, labels, test_data, test_labels, opt
 
         local accuracy = test_model(model, test_data, test_labels, opt)
         print("epoch ", epoch, " error: ", accuracy)
+	print("Saving")
+	torch.save("model.net", model, 'ascii')
+	print("Saved")
 
     end
 end
@@ -159,12 +161,12 @@ function main()
     opt.nTestDocs = 400
     opt.nClasses = 5
     -- SGD parameters - play around with these
-    opt.nEpochs = 5
+    opt.nEpochs = 100
     opt.minibatchSize = 128
     opt.nBatches = math.floor(opt.nTrainDocs / opt.minibatchSize)
-    opt.learningRate = 0.01
-    opt.learningRateDecay = 0.001
-    opt.momentum = 0.1
+    opt.learningRate = 0.03
+    opt.learningRateDecay = 0.01
+    opt.momentum = 0.01
     opt.idx = 1
 
     print("Loading raw data...")
@@ -186,9 +188,13 @@ function main()
 
     -- construct model:
     model = nn.Sequential()
-    
-    model:add(nn.Reshape(opt.words_per_review*opt.inputDim, true))
-    model:add(nn.Linear(opt.words_per_review*opt.inputDim, 5))
+    kW = 5
+    output_dim = 10
+    model:add(nn.TemporalConvolution(opt.inputDim, output_dim, kW))    
+    output_frames = (opt.words_per_review - kW) + 1
+    model:add(nn.HardTanh())
+    model:add(nn.Reshape(output_frames*output_dim, true))
+    model:add(nn.Linear(output_frames*output_dim, 5))
     model:add(nn.LogSoftMax())
     criterion = nn.ClassNLLCriterion()
    
