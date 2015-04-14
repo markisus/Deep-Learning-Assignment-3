@@ -3,7 +3,7 @@ require 'nn'
 require 'lookup'
 
 
-model = torch.load('model.net', 'ascii')
+model = torch.load('/scratch/ml4133/a3_model.net', 'ascii')
 
 cmd = torch.CmdLine()
 
