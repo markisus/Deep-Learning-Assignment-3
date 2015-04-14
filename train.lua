@@ -1,7 +1,6 @@
 require 'torch'
 require 'nn'
 require 'optim'
-require 'lookup'
 require 'xlua'
 
 ffi = require('ffi')
@@ -19,7 +18,7 @@ function preprocess_data(raw_data, opt)
 
     for i=1,opt.nClasses do
         for j=1,opt.nTrainDocs+opt.nTestDocs do
-	    xlua.progress((i-1)*(opt.nTrainDocs+opt.nTestDocs) + j, opt.nClasses*(opt.nTrainDocs+opt.nTestDocs))
+	    --xlua.progress((i-1)*(opt.nTrainDocs+opt.nTestDocs) + j, opt.nClasses*(opt.nTrainDocs+opt.nTestDocs))
             local k = order[(i-1)*(opt.nTrainDocs+opt.nTestDocs) + j]
             
             local doc_size = 1
@@ -32,21 +31,30 @@ function preprocess_data(raw_data, opt)
             vectorized_document = torch.Tensor(opt.words_per_review, opt.inputDim):fill(0)
 	    word_number = 1
 	    for word in document:gmatch("%S+") do
+  	        word = word:gsub("%p+", ""):lower() -- remove all punctuation and change to lower case
 	    	if word_number <= opt.words_per_review then
 		    if glove_cache[word] == nil then
-		       vector = lookup(word, vector)
-		       glove_cache[word] = vector:clone()
-		    else
-			--print("cache hit")
+		       goto continue
 		    end
 		    vectorized_document[word_number] = glove_cache[word]
+		else
+		    break
 		end
 		word_number = word_number + 1
+		::continue::
             end
 	    words_used = word_number - 1
-	    if words_used < opt.words_per_review then
+	    if words_used < opt.words_per_review and words_used ~= 0 then
 	       for t = 1, opt.words_per_review - words_used do
-	       	   vectorized_document[t + words_used] = vectorized_document[((t-1) % words_used) + 1]
+	       	   --print(t+words_used, ((t-1) % words_used), t)
+		   fake_word_index = t + words_used
+		   substitute_word_index = ((t-1) % words_used) + 1
+		   if pcall(function () vectorized_document[fake_word_index] = vectorized_document[substitute_word_index] end) then
+		   --ok
+		   else
+			print(fake_word_index, substitute_word_index, t, words_used)
+		   end
+   	       	   
 	       end
 	    end
 	    
@@ -103,6 +111,37 @@ function test_model(model, data, labels, opt)
     return err
 end
 
+function load_glove(path, inputDim)
+    
+    local glove_file = io.open(path)
+    local glove_table = {}
+
+    local line = glove_file:read("*l")
+    while line do
+        -- read the GloVe text file one line at a time, break at EOF
+        local i = 1
+        local word = ""
+        for entry in line:gmatch("%S+") do -- split the line at each space
+            if i == 1 then
+                -- word comes first in each line, so grab it and create new table entry
+                word = entry:gsub("%p+", ""):lower() -- remove all punctuation and change to lower case
+                if string.len(word) > 0 then
+                    glove_table[word] = torch.zeros(inputDim, 1) -- padded with an extra dimension for convolution
+                else
+                    break
+                end
+            else
+                -- read off and store each word vector element
+                glove_table[word][i-1] = tonumber(entry)
+            end
+            i = i+1
+        end
+        line = glove_file:read("*l")
+    end
+    
+    return glove_table
+end
+
 function main()
 
     -- Configuration parameters
@@ -130,34 +169,27 @@ function main()
 
     print("Loading raw data...")
     local raw_data = torch.load(opt.dataPath)
-    print(raw_data:size())
-    
+
+    print("Loading glove...")
+    glove_cache = load_glove(opt.glovePath, opt.inputDim)
+
     print("Computing document input representations...")
     local processed_data, labels = preprocess_data(raw_data, opt)
-    
+    print(processed_data:size())
     -- split data into makeshift training and validation sets
-    local training_data = processed_data[{1, opt.nTrainDocs * opt.nClasses}]:clone()
-    local training_labels = labels[{1, opt.nTrainDocs * opt.nClasses}]:clone()
+    local training_data = processed_data[{{1, opt.nTrainDocs * opt.nClasses}, {}, {}}]:clone()
+    local training_labels = labels[{{1, opt.nTrainDocs * opt.nClasses}}]:clone()
     
     -- make your own choices - here I have not created a separate test set
-    local test_data = processed_data[{opt.nTrainDocs * opt.nClasses + 1, (opt.nTrainDocs + opt.nTestDoc)*opt.nClasses}]:clone()
-    local test_labels = labels[{opt.nTrainDocs * opt.nClasses + 1, (opt.nTrainDocs + opt.nTestDoc)*opt.nClasses}]:clone()
+    local test_data = processed_data[{{opt.nTrainDocs * opt.nClasses + 1, (opt.nTrainDocs + opt.nTestDocs)*opt.nClasses}, {}, {}}]:clone()
+    local test_labels = labels[{{opt.nTrainDocs * opt.nClasses + 1, (opt.nTrainDocs + opt.nTestDocs)*opt.nClasses}}]:clone()
 
     -- construct model:
     model = nn.Sequential()
-   
-    -- if you decide to just adapt the baseline code for part 2, you'll probably want to make this linear and remove pooling
-    model:add(nn.TemporalConvolution(1, 20, 10, 1))
-    
-    --------------------------------------------------------------------------------------
-    -- Replace this temporal max-pooling module with your log-exponential pooling module:
-    --------------------------------------------------------------------------------------
-    model:add(nn.TemporalLogExpPooling(3, 1, 1))
     
     model:add(nn.Reshape(opt.words_per_review*opt.inputDim, true))
-    model:add(nn.Linear(20*39, 5))
+    model:add(nn.Linear(opt.words_per_review*opt.inputDim, 5))
     model:add(nn.LogSoftMax())
-
     criterion = nn.ClassNLLCriterion()
    
     train_model(model, criterion, training_data, training_labels, test_data, test_labels, opt)
